@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NovaTrade — Demo Crypto Desk</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#ECFDF5', 100: '#D1FAE5', 200: '#A7F3D0', 300: '#6EE7B7', 400: '#34D399', 500: '#10B981', 600: '#059669', 700: '#047857', 800: '#065F46', 900: '#064E3B'
+            },
+          dark: '#0B0F14',
+          card: '#121922',
+        }
+      }
+    }
+  </script>
+  <!-- Firebase (Compat builds for simple CDN use) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <style>
+    html, body {height: 100%;}
+    .glass {backdrop-filter: blur(10px);} 
+  </style>
+</head>
+<body class="min-h-full bg-dark text-white">
+  <header class="sticky top-0 z-30 bg-dark/80 glass border-b border-white/10">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="h-8 w-8 rounded-xl bg-primary-500"></div>
+        <div class="font-bold tracking-tight">NovaTrade <span class="text-white/50 text-sm align-top">DEMO</span></div>
+      </div>
+      <nav class="hidden md:flex items-center gap-4 text-sm">
+        <a class="hover:text-primary-300" href="#dashboard">Dashboard</a>
+        <a class="hover:text-primary-300" href="#wallets">Wallets</a>
+        <a class="hover:text-primary-300" href="#activity">Activity</a>
+      </nav>
+      <div id="authControls" class="flex items-center gap-2">
+        <button id="openAuth" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-sm">Sign in</button>
+        <button id="logoutBtn" class="hidden px-3 py-1.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-sm">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <!-- Hero / Status -->
+    <section class="grid md:grid-cols-3 gap-4" id="dashboard">
+      <div class="md:col-span-2 rounded-2xl bg-card border border-white/10 p-6 shadow-xl">
+        <h1 class="text-2xl font-semibold">Professional Static Crypto Trading Desk (Demo)</h1>
+        <p class="mt-1 text-white/70">Static frontend + Firebase backend (Auth + Firestore). Balances start at zero. Wallet addresses auto-rotate <em>only</em> when a deposit is recorded in realtime.</p>
+        <div class="mt-4 grid grid-cols-3 gap-3" id="balanceGrid">
+          <!-- Balance cards injected here -->
+        </div>
+      </div>
+      <div class="rounded-2xl bg-card border border-white/10 p-6 shadow-xl">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-white/70 text-sm">Account</div>
+            <div id="userEmail" class="font-medium">Not signed in</div>
+          </div>
+          <span id="accountStatus" class="px-2 py-1 rounded-lg text-xs bg-white/10">Guest</span>
+        </div>
+        <div class="mt-4 text-sm text-white/70">
+          <p>Use the auth panel to register/sign in. A fresh profile is initialized with zero balances and unique wallet receiving addresses per asset.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Wallets -->
+    <section id="wallets" class="rounded-2xl bg-card border border-white/10 p-6 shadow-xl">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Wallets</h2>
+        <label class="flex items-center gap-2 text-sm text-white/60">
+          <input id="adminToggle" type="checkbox" class="h-4 w-4">
+          Admin mode (enable editing)
+        </label>
+      </div>
+      <div id="walletList" class="mt-4 grid md:grid-cols-3 gap-4">
+        <!-- Wallet cards injected here -->
+      </div>
+    </section>
+
+    <!-- Activity -->
+    <section id="activity" class="rounded-2xl bg-card border border-white/10 p-6 shadow-xl">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Realtime Activity</h2>
+        <div class="text-sm text-white/60">Newest first</div>
+      </div>
+      <ul id="activityFeed" class="mt-4 space-y-3">
+        <!-- Activity items -->
+      </ul>
+    </section>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+      <div class="w-full max-w-md rounded-2xl bg-card border border-white/10 p-6 shadow-2xl">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-semibold">Sign in / Register</h3>
+          <button id="closeAuth" class="text-white/60 hover:text-white">✕</button>
+        </div>
+        <form id="authForm" class="mt-4 space-y-3">
+          <input id="email" type="email" required placeholder="Email" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 focus:outline-none" />
+          <input id="password" type="password" required placeholder="Password (min 6 chars)" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 focus:outline-none" />
+          <div class="flex gap-2">
+            <button id="loginBtn" type="button" class="flex-1 px-3 py-2 rounded-xl bg-primary-500 hover:bg-primary-600">Sign in</button>
+            <button id="registerBtn" type="button" class="flex-1 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20">Register</button>
+          </div>
+        </form>
+        <p class="mt-3 text-xs text-white/60">This is a demo. Do not use real private keys or production secrets here.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="py-10 text-center text-white/40">
+    <p>© <span id="year"></span> NovaTrade (Demo) — Static UI + Firebase backend. Not a real exchange.</p>
+  </footer>
+
+<script>
+  // --- 🔧 SETUP: Fill in your Firebase project config ---
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    appId: "YOUR_APP_ID",
+  };
+
+  // --- 🚀 Initialize Firebase ---
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  const ASSETS = [
+    { key: 'BTC', name: 'Bitcoin', unit: 'BTC' },
+    { key: 'XMR', name: 'Monero', unit: 'XMR' },
+    { key: 'USDT', name: 'Tether (USDT)', unit: 'USDT' },
+  ];
+
+  // Utils
+  const q = (sel) => document.querySelector(sel);
+  const uid = () => auth.currentUser && auth.currentUser.uid;
+  const genAddress = (prefix) => `${prefix}_${Math.random().toString(36).slice(2,10)}${Date.now().toString(36)}`;
+  const fmt = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 8 });
+  const now = () => firebase.firestore.FieldValue.serverTimestamp();
+
+  // UI refs
+  const balanceGrid = q('#balanceGrid');
+  const walletList = q('#walletList');
+  const activityFeed = q('#activityFeed');
+  const userEmail = q('#userEmail');
+  const accountStatus = q('#accountStatus');
+  const adminToggle = q('#adminToggle');
+
+  // Footer year
+  q('#year').textContent = new Date().getFullYear();
+
+  // Auth modal controls
+  const authModal = q('#authModal');
+  q('#openAuth').onclick = () => authModal.classList.remove('hidden');
+  q('#closeAuth').onclick = () => authModal.classList.add('hidden');
+  q('#logoutBtn').onclick = () => auth.signOut();
+
+  // Auth actions
+  q('#loginBtn').onclick = async () => {
+    const email = q('#email').value.trim();
+    const password = q('#password').value;
+    try {
+      await auth.signInWithEmailAndPassword(email, password);
+      authModal.classList.add('hidden');
+    } catch (e) { alert(e.message); }
+  };
+  q('#registerBtn').onclick = async () => {
+    const email = q('#email').value.trim();
+    const password = q('#password').value;
+    try {
+      const { user } = await auth.createUserWithEmailAndPassword(email, password);
+      // Initialize profile
+      const baseWallets = Object.fromEntries(ASSETS.map(a => [a.key, {
+        currentAddress: genAddress(a.key),
+        lastRotatedAt: now(),
+      }]));
+      const balances = Object.fromEntries(ASSETS.map(a => [a.key, 0]));
+      await db.collection('users').doc(user.uid).set({
+        email, createdAt: now(), balances, wallets: baseWallets
+      });
+      authModal.classList.add('hidden');
+    } catch (e) { alert(e.message); }
+  };
+
+  // Render helpers
+  function renderBalances(data){
+    balanceGrid.innerHTML = '';
+    ASSETS.forEach(asset => {
+      const amount = (data?.balances && data.balances[asset.key]) || 0;
+      const card = document.createElement('div');
+      card.className = 'rounded-2xl p-4 border border-white/10 bg-white/5';
+      card.innerHTML = `
+        <div class="text-white/60 text-sm">${asset.name}</div>
+        <div class="text-2xl font-semibold mt-1">${fmt(amount)} <span class="text-base text-white/50">${asset.unit}</span></div>
+      `;
+      balanceGrid.appendChild(card);
+    });
+  }
+
+  function walletCard(asset, data){
+    const { key, name } = asset;
+    const address = data?.wallets?.[key]?.currentAddress || '—';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'rounded-2xl p-4 border border-white/10 bg-white/5 space-y-3';
+    wrapper.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-white/70 text-sm">${name}</div>
+          <div class="font-semibold">${key}</div>
+        </div>
+        <div class="text-xs px-2 py-1 rounded-lg bg-white/10">Receive</div>
+      </div>
+      <div class="text-xs text-white/60">Current address (rotates on confirmed deposit):</div>
+      <div class="flex gap-2">
+        <input id="addr_${key}" class="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 focus:outline-none" value="${address}" ${adminToggle.checked ? '' : 'readonly'} />
+        <button data-copy="${key}" class="px-3 py-2 rounded-xl bg-primary-500 hover:bg-primary-600">Copy</button>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-white/50">
+        <button data-save="${key}" class="${adminToggle.checked ? '' : 'hidden'} px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20">Save address</button>
+        <button data-sim="${key}" class="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20">Simulate deposit</button>
+      </div>
+    `;
+    return wrapper;
+  }
+
+  function renderWallets(data){
+    walletList.innerHTML = '';
+    ASSETS.forEach(asset => walletList.appendChild(walletCard(asset, data)));
+
+    // Wire copy buttons
+    walletList.querySelectorAll('button[data-copy]').forEach(btn => {
+      btn.onclick = async () => {
+        const key = btn.getAttribute('data-copy');
+        const input = q(`#addr_${key}`);
+        await navigator.clipboard.writeText(input.value);
+        btn.textContent = 'Copied!';
+        setTimeout(()=> btn.textContent='Copy', 1000);
+      };
+    });
+
+    // Admin save address
+    walletList.querySelectorAll('button[data-save]').forEach(btn => {
+      btn.onclick = async () => {
+        const key = btn.getAttribute('data-save');
+        const val = q(`#addr_${key}`).value.trim();
+        if(!val) return alert('Address cannot be empty');
+        try {
+          await db.collection('users').doc(uid()).update({ [`wallets.${key}.currentAddress`]: val });
+          alert('Address saved');
+        } catch(e){ alert(e.message); }
+      };
+    });
+
+    // Simulate deposit
+    walletList.querySelectorAll('button[data-sim]').forEach(btn => {
+      btn.onclick = async () => {
+        if(!uid()) return alert('Sign in first');
+        const asset = btn.getAttribute('data-sim');
+        const amountStr = prompt(`Deposit amount in ${asset}:`, '0.005');
+        const amount = parseFloat(amountStr);
+        if(!amount || amount <= 0) return;
+        const userRef = db.collection('users').doc(uid());
+        const depRef = userRef.collection('deposits').doc();
+        await db.runTransaction(async (tx) => {
+          const snap = await tx.get(userRef);
+          if(!snap.exists) throw new Error('Profile missing');
+          const data = snap.data();
+          const balances = {...data.balances};
+          balances[asset] = (balances[asset] || 0) + amount;
+          // Rotate address on deposit
+          const wallets = {...data.wallets};
+          wallets[asset] = {
+            currentAddress: genAddress(asset),
+            lastRotatedAt: now(),
+          };
+          tx.update(userRef, { balances, wallets });
+          tx.set(depRef, { asset, amount, createdAt: now(), txid: genAddress('tx') });
+        });
+      };
+    });
+  }
+
+  // Activity feed (listen newest first)
+  function renderActivityItem(doc){
+    const d = doc.data();
+    const li = document.createElement('li');
+    li.className = 'p-3 rounded-xl bg-white/5 border border-white/10';
+    const ts = d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString() : '—';
+    li.innerHTML = `<div class="text-sm">Deposit <span class="font-semibold">${fmt(d.amount)} ${d.asset}</span> — <span class="text-white/60">${ts}</span></div>
+      <div class="text-xs text-white/50">tx: ${d.txid}</div>`;
+    return li;
+  }
+
+  let unsubUser = null;
+  let unsubFeed = null;
+  auth.onAuthStateChanged(async (user)=>{
+    if(user){
+      userEmail.textContent = user.email;
+      accountStatus.textContent = 'Signed in';
+      q('#openAuth').classList.add('hidden');
+      q('#logoutBtn').classList.remove('hidden');
+
+      const userRef = db.collection('users').doc(user.uid);
+      const profile = await userRef.get();
+      if(!profile.exists){
+        const baseWallets = Object.fromEntries(ASSETS.map(a => [a.key, {
+          currentAddress: genAddress(a.key),
+          lastRotatedAt: now(),
+        }]));
+        const balances = Object.fromEntries(ASSETS.map(a => [a.key, 0]));
+        await userRef.set({ email: user.email, createdAt: now(), balances, wallets: baseWallets });
+      }
+
+      // Listen to profile changes
+      unsubUser && unsubUser();
+      unsubUser = userRef.onSnapshot(snap => {
+        const data = snap.data();
+        renderBalances(data);
+        renderWallets(data);
+      });
+
+      // Listen to activity (newest first)
+      unsubFeed && unsubFeed();
+      unsubFeed = userRef.collection('deposits').orderBy('createdAt', 'desc').limit(50).onSnapshot(snap => {
+        activityFeed.innerHTML = '';
+        snap.forEach(doc => activityFeed.appendChild(renderActivityItem(doc)));
+        if(snap.empty){ activityFeed.innerHTML = '<li class="text-white/50">No activity yet.</li>'; }
+      });
+
+    } else {
+      userEmail.textContent = 'Not signed in';
+      accountStatus.textContent = 'Guest';
+      q('#openAuth').classList.remove('hidden');
+      q('#logoutBtn').classList.add('hidden');
+      balanceGrid.innerHTML = '';
+      walletList.innerHTML = '';
+      activityFeed.innerHTML = '<li class="text-white/50">Sign in to see your activity.</li>';
+      unsubUser && unsubUser();
+      unsubFeed && unsubFeed();
+    }
+  });
+
+  // Re-render wallets when toggling admin mode
+  adminToggle.addEventListener('change', async ()=>{
+    if(!uid()) return;
+    const snap = await db.collection('users').doc(uid()).get();
+    renderWallets(snap.data());
+  });
+</script>
+
+<!--
+==============================================
+SECURITY (Firestore Rules) — paste in Firebase console
+==============================================
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      match /deposits/{depId} {
+        allow read, create: if request.auth != null && request.auth.uid == userId;
+        allow update, delete: if false; // immutable once created
+      }
+    }
+  }
+}
+
+NOTES
+- Addresses are read-only for users unless Admin Mode is toggled (client-side). In production, manage admin via custom claims & server-side functions.
+- Address rotates ONLY on deposit (see transaction in Simulate deposit). Replace this with webhook/Cloud Function on confirmed blockchain event for production.
+- Balances are a mock ledger for demo. Do NOT connect to real funds.
+-->
+
+</body>
+</html>
